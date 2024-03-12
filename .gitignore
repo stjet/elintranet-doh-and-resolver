@@ -1,3 +1,6 @@
 /target
 .env
 intranet_subdomains.csv
+*.crt
+*.key
+*.pem
