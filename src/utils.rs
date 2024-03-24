@@ -58,3 +58,13 @@ pub fn b64_url_to_u8_vec(b64: &String) -> Result<Vec<u8>, ()> {
 
   return Ok(u8_vec);
 }
+
+//put in valid input or else! todo: change it to Result<> and handle errors
+pub fn ip_string_to_u8_array(ip: &str) -> [u8; 4] {
+  let mut ip_array = [0; 4];
+  let mut ip_split = ip.split(".");
+  for i in 0..4 {
+    ip_array[i] = ip_split.next().unwrap().parse::<u8>().unwrap();
+  }
+  ip_array
+}
