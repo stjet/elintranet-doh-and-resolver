@@ -24,11 +24,12 @@ pub fn load_env() -> HashMap<String, String> {
   return env;
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct SubdomainInfo {
   pub ip: [u8; 4],
   pub ip_string: String,
   pub port: Option<u16>,
+  pub proxy_use_http: bool, //if proxied (currently only 192.168.x.x are proxied), whether or not to use https
 }
 
 pub fn get_intranet_subdomains() -> HashMap<String, SubdomainInfo> {
@@ -54,7 +55,8 @@ pub fn get_intranet_subdomains() -> HashMap<String, SubdomainInfo> {
       }
     };
     let ip_string = ip_parts[0].to_string();
-    intranet_subdomains.insert(parts[0].to_string(), SubdomainInfo { ip: utils::ip_string_to_u8_array(&ip_string), ip_string, port });
+    let proxy_use_http = parts.get(2) == Some(&"nohttps");
+    intranet_subdomains.insert(parts[0].to_string(), SubdomainInfo { ip: utils::ip_string_to_u8_array(&ip_string), ip_string, port, proxy_use_http });
   }
 
   intranet_subdomains

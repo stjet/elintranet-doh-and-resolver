@@ -20,7 +20,7 @@ mod utils;
 
 //rfc 1035 (section 4, section 7.3)
 //rfc 8484
-//http://www.tcpipguide.com/free/t_DNSMessageHeaderandQuestionSectionFormat-2.htm
+//www.tcpipguide.com/free/t_DNSMessageHeaderandQuestionSectionFormat-2.htm
 
 fn get_header(find_header: String, headers: &[Header]) -> Option<String> {
   for header in headers {
@@ -105,11 +105,9 @@ fn extract_host_from_dns_query(dns_query: &[u8], start: Option<usize>) -> Result
   return Ok(domain_name.join("."));
 }
 
-//IMPORTANT TODOS
-
 //16 bits (2 bytes)
+/*
 fn extract_type_bytes_from_dns_query(dns_query: &[u8]) -> u16 {
-  //TODO: check bounds later
   //
   let length = dns_query[12];
   if length >= 192 {
@@ -118,6 +116,7 @@ fn extract_type_bytes_from_dns_query(dns_query: &[u8]) -> u16 {
     ((dns_query[12 + length as usize] as u16) << 8) | (dns_query[12 + length as usize + 1] as u16)
   }
 }
+*/
 
 fn query_hostname_to_label_bytes(query_hostname: &str) -> Vec<u8> {
   let mut label_bytes = Vec::new();
@@ -145,12 +144,14 @@ fn main() {
   let INTERNAL_IP = env.get(&"INTERNAL_IP".to_string()).unwrap();
   let PORT = 443; //8443 to run without sudo? but then needs to specify port in doh config
 
+  let NON_INTRANET_DOH = env.get(&"NON_INTRANET_DOH".to_string()).cloned().unwrap_or("https://query.hdns.io/dns-query".to_string());
+
   println!("Running on dns.{}:{}", INTRANET_HOST, PORT);
 
   let intranet_subdomains = load::get_intranet_subdomains();
 
   let client = reqwest::blocking::Client::new();
-  let self_cert_client = reqwest::blocking::Client::new(); //todo
+  let self_cert_client = reqwest::blocking::Client::builder().add_root_certificate(reqwest::Certificate::from_pem(include_bytes!("../fakeca.pem")).expect("Did not find root CA cert")).build().unwrap();
 
   //let server = Server::http(INTERNAL_IP.to_owned() + ":" + &PORT.to_string()).unwrap();
   let ssl_config = SslConfig {
@@ -260,9 +261,6 @@ fn main() {
               //also check length
               //TODO
               //
-              //make sure question type is 255 or A (1) (unrelated, CNAME is 5)
-              //TODO
-              //
               //println!("q: {:?}", dns_query);
               //extract the host name
               let query_host_wrapped = extract_host_from_dns_query(&dns_query, None);
@@ -271,6 +269,9 @@ fn main() {
                 //now actual dns query stuff, and http response
                 match do_dns_query(&query_host, INTERNAL_IP.clone(), &INTRANET_HOST, &intranet_subdomains) {
                   Ok(mut ip) => {
+                    //TODO: make sure question type is all records (255) or A (1) (unrelated, CNAME is 5),
+                    //extract_type_bytes_from_dns_query?
+                    //
                     //firefox blocks us, very sad
                     if ip[0] == 192 && ip[1] == 168 {
                       ip = utils::ip_string_to_u8_array(&INTERNAL_IP);
@@ -316,9 +317,9 @@ fn main() {
                     let mut header_map = HeaderMap::new();
                     header_map.insert(ACCEPT, "application/dns-message".parse().unwrap());
                     header_map.insert(CONTENT_TYPE, "application/dns-message".parse().unwrap());
-                    let try_res = client.post("https://doh.hnsdns.com/dns-query").body(dns_query).headers(header_map).send(); //in the future, throw 500 if fails
+                    let try_res = client.post(&NON_INTRANET_DOH).body(dns_query).headers(header_map).send(); //in the future, throw 500 if fails
                                                                                                      if let Ok(res) = try_res {
-                      let res_status = res.status().as_u16();
+                      let res_status = res.status().as_u16(); //todo: status should be 200
                       //println!("response from hnsdns: {:?}", res.bytes().unwrap().to_vec());
                       let response = Response::from_data(res.bytes().unwrap()).with_status_code(res_status).with_header(Header::from_str("Content-Type: application/dns-message").unwrap()).with_header(Header::from_str("Accept: application/dns-message").unwrap());
                       let _ = request.respond(response);
@@ -362,7 +363,8 @@ fn main() {
           //though we have https cert, we need the other end to have https cert to for security
           let port_string = if let Some(port) = subdomain_info.port { ":".to_owned() + &port.to_string() } else { String::new() };
           //let request_url = "https://".to_owned() + &subdomain_info.ip_string + &port_string
-          let request_url = "http://".to_owned() + &subdomain_info.ip_string + &port_string + path;
+          let protocol = if subdomain_info.proxy_use_http == true { "http://" } else { "https://" };
+          let request_url = protocol.to_owned() + &subdomain_info.ip_string + &port_string + path;
           let mut proxy_req = self_cert_client.request(reqwest::Method::from_str(method.as_str()).unwrap(), request_url);
           //if body
           //headers
@@ -400,10 +402,6 @@ fn main() {
         } else {
           //421 misdirected, since we dont know wtf this host is. it's not us!
           let _ = request.respond(Response::empty(421));
-          /*
-          let response = Response::from_string("test");
-          let _ = request.respond(response);
-          */
         }
       }
     } else {
