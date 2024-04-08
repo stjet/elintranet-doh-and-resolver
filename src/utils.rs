@@ -68,3 +68,11 @@ pub fn ip_string_to_u8_array(ip: &str) -> [u8; 4] {
   }
   ip_array
 }
+
+//pray we don't cause a 416
+pub fn limit_open_ended_range(range: &str) -> String {
+  //two megabytes at a time
+  const MAX_REQUEST_SIZE: u64 = 2 * 1024 * 1024;
+  //bytes=0-
+  format!("{}{}", range, range.get(6..range.len()-1).unwrap().parse::<u64>().unwrap() + MAX_REQUEST_SIZE)
+}

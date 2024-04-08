@@ -365,11 +365,16 @@ fn main() {
           //let request_url = "https://".to_owned() + &subdomain_info.ip_string + &port_string
           let protocol = if subdomain_info.proxy_use_http == true { "http://" } else { "https://" };
           let request_url = protocol.to_owned() + &subdomain_info.ip_string + &port_string + path;
-          let mut proxy_req = self_cert_client.request(reqwest::Method::from_str(method.as_str()).unwrap(), request_url);
+          let mut proxy_req = self_cert_client.request(reqwest::Method::from_str(method.as_str()).unwrap(), request_url);//.timeout(std::time::Duration::MAX);
           //if body
           //headers
           for tiny_header in request.headers() {
-            proxy_req = proxy_req.header(reqwest::header::HeaderName::from_str(tiny_header.field.as_str().as_str()).unwrap(), reqwest::header::HeaderValue::from_str(tiny_header.value.as_str()).unwrap());
+            let header_name = tiny_header.field.as_str().as_str();
+            let mut header_value = tiny_header.value.as_str().to_string();
+            if header_name == "Range" && header_value.starts_with("bytes=") && header_value.ends_with("-") {
+              header_value = utils::limit_open_ended_range(&header_value);
+            }
+            proxy_req = proxy_req.header(reqwest::header::HeaderName::from_str(header_name).unwrap(), reqwest::header::HeaderValue::from_str(&header_value).unwrap());
           }
           if request.body_length().is_some() {
             let mut body = Vec::new();
